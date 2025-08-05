@@ -1,0 +1,284 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model for authentication and roles
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  firstName String?
+  lastName  String?
+  role      UserRole @default(SALES_REP)
+  avatar    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  ownedLeads     Lead[]       @relation("LeadOwner")
+  activities     Activity[]
+  workflows      Workflow[]
+  notifications  Notification[]
+  createdReports Report[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  SALES_REP
+  MARKETING
+}
+
+// Lead/Customer model - core of CRM
+model Lead {
+  id           String     @id @default(cuid())
+  title        String
+  firstName    String?
+  lastName     String?
+  email        String?
+  phone        String?
+  company      String?
+  position     String?
+  status       LeadStatus @default(MARKETING)
+  source       String?
+  value        Decimal?   @db.Decimal(12, 2)
+  score        Int?       @default(0)
+  validation   ValidationStatus @default(PENDING)
+  lastContact  DateTime?
+  firstContact DateTime?
+  lastNote     String?
+  tags         String[]
+  customFields Json?
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Relations
+  owner       User?       @relation("LeadOwner", fields: [ownerId], references: [id])
+  ownerId     String?
+  activities  Activity[]
+  notes       Note[]
+  attachments Attachment[]
+
+  @@map("leads")
+}
+
+enum LeadStatus {
+  MARKETING
+  WORKING
+  QUALIFIED
+  DOWNLOADED
+  CONVERTED
+  LOST
+}
+
+enum ValidationStatus {
+  PENDING
+  VALIDATED
+  INVALID
+  NEEDS_REVIEW
+}
+
+// Activity tracking for leads and users
+model Activity {
+  id          String       @id @default(cuid())
+  type        ActivityType
+  description String
+  details     Json?
+  isCompleted Boolean      @default(false)
+  dueDate     DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relations
+  lead   Lead?   @relation(fields: [leadId], references: [id])
+  leadId String?
+  user   User    @relation(fields: [userId], references: [id])
+  userId String
+
+  @@map("activities")
+}
+
+enum ActivityType {
+  CALL
+  EMAIL
+  MEETING
+  TASK
+  NOTE
+  FOLLOW_UP
+  PROPOSAL
+  CONTRACT
+}
+
+// Notes for leads
+model Note {
+  id        String   @id @default(cuid())
+  content   String
+  isPrivate Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  lead   Lead   @relation(fields: [leadId], references: [id])
+  leadId String
+
+  @@map("notes")
+}
+
+// File attachments
+model Attachment {
+  id       String @id @default(cuid())
+  filename String
+  fileSize Int
+  fileType String
+  filePath String
+  createdAt DateTime @default(now())
+
+  // Relations
+  lead   Lead?   @relation(fields: [leadId], references: [id])
+  leadId String?
+
+  @@map("attachments")
+}
+
+// Workflow automation model
+model Workflow {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  trigger     Json          // Workflow trigger conditions
+  actions     Json          // Workflow actions to execute
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  createdBy User   @relation(fields: [userId], references: [id])
+  userId    String
+  executions WorkflowExecution[]
+
+  @@map("workflows")
+}
+
+// Workflow execution tracking
+model WorkflowExecution {
+  id         String   @id @default(cuid())
+  status     ExecutionStatus @default(PENDING)
+  startedAt  DateTime @default(now())
+  completedAt DateTime?
+  error      String?
+  result     Json?
+
+  // Relations
+  workflow   Workflow @relation(fields: [workflowId], references: [id])
+  workflowId String
+
+  @@map("workflow_executions")
+}
+
+enum ExecutionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+// Notifications system
+model Notification {
+  id        String           @id @default(cuid())
+  title     String
+  message   String
+  type      NotificationType
+  isRead    Boolean          @default(false)
+  data      Json?
+  createdAt DateTime         @default(now())
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  @@map("notifications")
+}
+
+enum NotificationType {
+  REMINDER
+  LEAD_UPDATE
+  TASK_DUE
+  WORKFLOW_COMPLETED
+  SYSTEM_ALERT
+}
+
+// Reports and analytics
+model Report {
+  id          String      @id @default(cuid())
+  name        String
+  type        ReportType
+  filters     Json?
+  data        Json
+  isScheduled Boolean     @default(false)
+  schedule    String?     // Cron expression for scheduled reports
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relations
+  createdBy User   @relation(fields: [userId], references: [id])
+  userId    String
+
+  @@map("reports")
+}
+
+enum ReportType {
+  LEAD_ANALYTICS
+  SALES_PERFORMANCE
+  CONVERSION_FUNNEL
+  REVENUE_FORECAST
+  ACTIVITY_SUMMARY
+  CUSTOM
+}
+
+// AI insights and predictions
+model AIInsight {
+  id          String      @id @default(cuid())
+  type        InsightType
+  title       String
+  description String
+  confidence  Float       // 0-1 confidence score
+  data        Json
+  isActive    Boolean     @default(true)
+  expiresAt   DateTime?
+  createdAt   DateTime    @default(now())
+
+  @@map("ai_insights")
+}
+
+enum InsightType {
+  LEAD_SCORING
+  NEXT_BEST_ACTION
+  CHURN_PREDICTION
+  OPPORTUNITY_FORECAST
+  CONTACT_TIMING
+}
+
+// System settings and configurations
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  category  String
+  isPublic  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
